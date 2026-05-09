@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>出欠確認表</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Attendance</p>
+          <h1>出欠確認表</h1>
+        </div>
+        <label class="date-picker">
+          <span>日付</span>
+          <input id="activeDate" type="date">
+        </label>
+      </header>
+
+      <nav class="tabs" aria-label="画面切り替え">
+        <button class="tab-button is-active" type="button" data-view="attendance">入力</button>
+        <button class="tab-button" type="button" data-view="summary">一覧</button>
+        <button class="tab-button" type="button" data-view="calendar">カレンダー</button>
+        <button class="tab-button" type="button" data-view="members">名簿</button>
+      </nav>
+
+      <main>
+        <div id="syncStatus" class="sync-status" role="status">端末内に保存中</div>
+
+        <section id="attendanceView" class="view is-active" aria-labelledby="attendanceTitle">
+          <div class="section-heading">
+            <div>
+              <h2 id="attendanceTitle">出欠入力</h2>
+              <p id="attendanceDateLabel"></p>
+            </div>
+            <div class="count-strip" aria-live="polite">
+              <span class="count present">出 <strong id="presentCount">0</strong></span>
+              <span class="count absent">欠 <strong id="absentCount">0</strong></span>
+              <span class="count pending">未 <strong id="pendingCount">0</strong></span>
+            </div>
+          </div>
+          <div id="attendanceList" class="member-list"></div>
+          <p id="emptyAttendance" class="empty-state">名簿管理でメンバーを追加してください。</p>
+        </section>
+
+        <section id="summaryView" class="view" aria-labelledby="summaryTitle">
+          <div class="section-heading">
+            <div>
+              <h2 id="summaryTitle">一覧確認</h2>
+              <p>選択した日の出欠を一覧で確認できます。</p>
+            </div>
+            <button id="clearDayButton" class="quiet-button danger" type="button">この日の記録を消去</button>
+          </div>
+          <div class="summary-table-wrap">
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th>名前</th>
+                  <th>状態</th>
+                  <th>更新時刻</th>
+                </tr>
+              </thead>
+              <tbody id="summaryBody"></tbody>
+            </table>
+          </div>
+          <p id="emptySummary" class="empty-state">表示できるメンバーがいません。</p>
+        </section>
+
+        <section id="calendarView" class="view" aria-labelledby="calendarTitle">
+          <div class="section-heading">
+            <div>
+              <h2 id="calendarTitle">カレンダー</h2>
+              <p>日付を選ぶと入力・一覧画面にも反映されます。</p>
+            </div>
+            <div class="month-controls">
+              <button id="prevMonth" class="icon-button" type="button" aria-label="前の月">‹</button>
+              <strong id="monthLabel"></strong>
+              <button id="nextMonth" class="icon-button" type="button" aria-label="次の月">›</button>
+            </div>
+          </div>
+          <div class="calendar-grid day-names" aria-hidden="true">
+            <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+          </div>
+          <div id="calendarGrid" class="calendar-grid"></div>
+        </section>
+
+        <section id="membersView" class="view" aria-labelledby="membersTitle">
+          <div class="section-heading">
+            <div>
+              <h2 id="membersTitle">名簿管理</h2>
+              <p>追加・削除・名前の修正ができます。</p>
+            </div>
+          </div>
+          <form id="memberForm" class="member-form">
+            <input id="memberNameInput" type="text" autocomplete="off" placeholder="名前を入力">
+            <button type="submit">追加</button>
+          </form>
+          <div id="memberAdminList" class="admin-list"></div>
+          <p id="emptyMembers" class="empty-state">まだメンバーが登録されていません。</p>
+        </section>
+      </main>
+    </div>
+
+    <template id="attendanceItemTemplate">
+      <article class="attendance-item">
+        <div class="member-name"></div>
+        <div class="attendance-actions" role="group">
+          <button class="present-button" type="button">出</button>
+          <button class="absent-button" type="button">欠</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="memberAdminTemplate">
+      <article class="admin-item">
+        <input class="admin-name-input" type="text">
+        <button class="save-member-button" type="button">保存</button>
+        <button class="delete-member-button" type="button">削除</button>
+      </article>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

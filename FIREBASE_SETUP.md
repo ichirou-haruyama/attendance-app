@@ -49,12 +49,28 @@ service cloud.firestore {
 
 このルールはURLを知っている人なら読み書きできます。本番運用ではログイン機能を追加し、管理者だけが名簿編集できるルールに変更してください。
 
-## 4. 公開
+## 4. Firebase Hostingで公開
+
+このリポジトリでは `firebase.json` で公開フォルダを `public` にしています。Firebase Hostingへアップロードされるのは `public` 内のファイルだけです。
+
+```bash
+firebase deploy --only hosting
+```
+
+`firebase init hosting` をやり直す場合は、公開フォルダを必ず `public` にしてください。
+
+```txt
+What do you want to use as your public directory?
+public
+```
+
+## 5. GitHubへ反映
 
 `firebase-config.js` を更新したら、GitHubへpushします。
 
 ```bash
-git add index.html styles.css app.js firebase-config.js FIREBASE_SETUP.md
+cp index.html styles.css app.js firebase-config.js public/
+git add index.html styles.css app.js firebase-config.js firebase.json public FIREBASE_SETUP.md
 git commit -m "Add Firebase sync"
 git push
 ```
