@@ -1,14 +1,24 @@
-const STORAGE_KEY = "attendance-app-v2";
+import { attendanceDocumentPath, firebaseConfig } from "./firebase-config.js";
+
+const STORAGE_KEY = "attendance-app-v3";
 
 const state = {
   members: [],
   records: {},
   activeDate: toDateKey(new Date()),
   calendarMonth: startOfMonth(new Date()),
+  saveMode: "local",
+  remoteReady: false,
+  remoteSaveTimer: null,
 };
+
+let firestoreApi = null;
+let attendanceDocRef = null;
+let unsubscribeAttendance = null;
 
 const el = {
   activeDate: document.querySelector("#activeDate"),
+  syncStatus: document.querySelector("#syncStatus"),
   attendanceDateLabel: document.querySelector("#attendanceDateLabel"),
   attendanceList: document.querySelector("#attendanceList"),
   emptyAttendance: document.querySelector("#emptyAttendance"),
@@ -32,10 +42,11 @@ const el = {
 
 init();
 
-function init() {
-  loadState();
+async function init() {
+  loadLocalState();
   bindEvents();
   render();
+  await setupFirebase();
 }
 
 function bindEvents() {
@@ -81,6 +92,59 @@ function bindEvents() {
   });
 }
 
+async function setupFirebase() {
+  if (!isFirebaseConfigured(firebaseConfig)) {
+    setSyncStatus("端末内に保存中 Firebase設定を入れると共有保存に切り替わります。", "local");
+    return;
+  }
+
+  try {
+    setSyncStatus("Firebaseへ接続中...", "local");
+    const [{ initializeApp }, firestore] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js"),
+    ]);
+
+    const app = initializeApp(firebaseConfig);
+    const db = firestore.getFirestore(app);
+    const [collectionName, documentId] = attendanceDocumentPath.split("/");
+
+    firestoreApi = firestore;
+    attendanceDocRef = firestore.doc(db, collectionName, documentId);
+    state.saveMode = "firebase";
+
+    unsubscribeAttendance = firestore.onSnapshot(
+      attendanceDocRef,
+      async (snapshot) => {
+        if (!snapshot.exists()) {
+          await saveRemoteState();
+          state.remoteReady = true;
+          setSyncStatus("Firebaseで共有保存中", "online");
+          return;
+        }
+
+        const data = snapshot.data();
+        state.members = normalizeMembers(data.members);
+        state.records = normalizeRecords(data.records);
+        state.remoteReady = true;
+        setSyncStatus("Firebaseで共有保存中", "online");
+        render();
+      },
+      (error) => {
+        console.error(error);
+        state.saveMode = "local";
+        state.remoteReady = false;
+        setSyncStatus("Firebase接続エラー 端末内保存に切り替えました。", "error");
+      },
+    );
+  } catch (error) {
+    console.error(error);
+    state.saveMode = "local";
+    state.remoteReady = false;
+    setSyncStatus("Firebase接続エラー 端末内保存に切り替えました。", "error");
+  }
+}
+
 function switchView(viewName) {
   document.querySelectorAll(".tab-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.view === viewName);
@@ -91,7 +155,7 @@ function switchView(viewName) {
   });
 }
 
-function loadState() {
+function loadLocalState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) {
     state.members = [];
@@ -100,8 +164,8 @@ function loadState() {
 
   try {
     const parsed = JSON.parse(saved);
-    state.members = Array.isArray(parsed.members) ? parsed.members : [];
-    state.records = parsed.records && typeof parsed.records === "object" ? parsed.records : {};
+    state.members = normalizeMembers(parsed.members);
+    state.records = normalizeRecords(parsed.records);
     state.activeDate = parsed.activeDate || state.activeDate;
     state.calendarMonth = startOfMonth(parseDateKey(state.activeDate));
   } catch {
@@ -111,6 +175,13 @@ function loadState() {
 }
 
 function saveState() {
+  saveLocalState();
+  if (state.saveMode === "firebase") {
+    scheduleRemoteSave();
+  }
+}
+
+function saveLocalState() {
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -118,6 +189,30 @@ function saveState() {
       records: state.records,
       activeDate: state.activeDate,
     }),
+  );
+}
+
+function scheduleRemoteSave() {
+  window.clearTimeout(state.remoteSaveTimer);
+  state.remoteSaveTimer = window.setTimeout(() => {
+    saveRemoteState().catch((error) => {
+      console.error(error);
+      setSyncStatus("Firebase保存エラー 画面を再読み込みして確認してください。", "error");
+    });
+  }, 150);
+}
+
+async function saveRemoteState() {
+  if (!firestoreApi || !attendanceDocRef) return;
+
+  await firestoreApi.setDoc(
+    attendanceDocRef,
+    {
+      members: state.members,
+      records: state.records,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
   );
 }
 
@@ -323,6 +418,31 @@ function countDay(dateKey) {
   );
 }
 
+function isFirebaseConfigured(config) {
+  return Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
+}
+
+function normalizeMembers(members) {
+  if (!Array.isArray(members)) return [];
+  return members
+    .filter((member) => member && typeof member.name === "string")
+    .map((member) => ({
+      id: member.id || crypto.randomUUID(),
+      name: member.name,
+    }));
+}
+
+function normalizeRecords(records) {
+  if (!records || typeof records !== "object" || Array.isArray(records)) return {};
+  return records;
+}
+
+function setSyncStatus(message, status) {
+  el.syncStatus.textContent = message;
+  el.syncStatus.classList.toggle("is-online", status === "online");
+  el.syncStatus.classList.toggle("is-error", status === "error");
+}
+
 function toDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -355,3 +475,7 @@ function formatTime(isoString) {
     minute: "2-digit",
   }).format(new Date(isoString));
 }
+
+window.addEventListener("beforeunload", () => {
+  if (unsubscribeAttendance) unsubscribeAttendance();
+});
